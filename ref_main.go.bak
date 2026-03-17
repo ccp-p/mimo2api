@@ -1,0 +1,1173 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+const (
+	BaseURL      = "https://aistudio.xiaomimimo.com"
+	ChatAPI      = "/open-apis/bot/chat"
+	SaveAPI      = "/open-apis/chat/conversation/save"
+	UserCheckAPI = "/open-apis/user/mi/get"
+	PhParam      = "xiaomichatbot_ph"
+)
+
+var baseModels = []string{"mimo-v2-flash-studio", "mimo-v2-flash"}
+
+type ParsedModel struct {
+	BaseModel      string
+	EnableThinking bool
+	EnableSearch   bool
+}
+
+func parseModelName(model string) (*ParsedModel, error) {
+	result := &ParsedModel{}
+	name := model
+	nameLower := strings.ToLower(model)
+
+	suffixes := []string{
+		"-thinking-search", "-search-thinking",
+		"-thinking", "-search",
+	}
+
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(nameLower, suffix) {
+			name = name[:len(name)-len(suffix)]
+			switch suffix {
+			case "-thinking-search", "-search-thinking":
+				result.EnableThinking = true
+				result.EnableSearch = true
+			case "-thinking":
+				result.EnableThinking = true
+			case "-search":
+				result.EnableSearch = true
+				result.EnableSearch = true
+			}
+			break
+		}
+	}
+
+	isValid := false
+	for _, base := range baseModels {
+		if name == base {
+			isValid = true
+			result.BaseModel = base
+			break
+		}
+	}
+
+	if !isValid {
+		return nil, fmt.Errorf("unsupported model: %s", model)
+	}
+
+	return result, nil
+}
+
+func getSupportedModels() []string {
+	models := make([]string, 0)
+	suffixes := []string{
+		"",
+		"-thinking",
+		"-search",
+		"-thinking-search",
+		"-search-thinking",
+	}
+	for _, base := range baseModels {
+		for _, suffix := range suffixes {
+			models = append(models, base+suffix)
+		}
+	}
+	return models
+}
+
+type Config struct {
+	APIKey            string `json:"api_key"`
+	Port              int    `json:"port"`
+	AuthCheckInterval int    `json:"auth_check_interval"`
+	Debug             bool   `json:"debug"`
+}
+
+type Account struct {
+	Name   string `json:"name"`
+	Cookie string `json:"cookie"`
+	Ph     string `json:"ph"`
+	Valid  bool   `json:"-"`
+}
+
+type ModelConfig struct {
+	EnableThinking  bool    `json:"enableThinking"`
+	Temperature     float64 `json:"temperature"`
+	TopP            float64 `json:"topP"`
+	WebSearchStatus string  `json:"webSearchStatus"`
+	Model           string  `json:"model"`
+}
+
+type MimoRequest struct {
+	MsgID          string        `json:"msgId"`
+	ConversationID string        `json:"conversationId"`
+	Query          string        `json:"query"`
+	ModelConfig    ModelConfig   `json:"modelConfig"`
+	MultiMedias    []interface{} `json:"multiMedias"`
+}
+
+type SaveConversationRequest struct {
+	ConversationID string `json:"conversationId"`
+	Title          string `json:"title"`
+	Type           string `json:"type"`
+}
+
+type ToolFunction struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+}
+
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+type ToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+type Message struct {
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+}
+
+type APIChatRequest struct {
+	Model       string      `json:"model"`
+	Messages    []Message   `json:"messages"`
+	Stream      bool        `json:"stream"`
+	Temperature *float64    `json:"temperature,omitempty"`
+	TopP        *float64    `json:"top_p,omitempty"`
+	Tools       []Tool      `json:"tools,omitempty"`
+	ToolChoice  interface{} `json:"tool_choice,omitempty"`
+}
+
+type Client struct {
+	httpClient *http.Client
+	account    *Account
+}
+
+type AccountPool struct {
+	accounts []*Account
+	index    uint64
+	mu       sync.RWMutex
+}
+
+type Metrics struct {
+	TotalRequests   int64
+	SuccessRequests int64
+	FailedRequests  int64
+	InputTokens     int64
+	OutputTokens    int64
+	RequestsPerMin  []int64
+	LastMinute      int64
+	mu              sync.RWMutex
+}
+
+func (m *Metrics) RecordRequest(success bool, inputTokens, outputTokens int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.TotalRequests++
+	if success {
+		m.SuccessRequests++
+	} else {
+		m.FailedRequests++
+	}
+	m.InputTokens += int64(inputTokens)
+	m.OutputTokens += int64(outputTokens)
+
+	now := time.Now().Unix() / 60
+	if now != m.LastMinute {
+		m.RequestsPerMin = append(m.RequestsPerMin, 0)
+		if len(m.RequestsPerMin) > 60 {
+			m.RequestsPerMin = m.RequestsPerMin[1:]
+		}
+		m.LastMinute = now
+	}
+	if len(m.RequestsPerMin) > 0 {
+		m.RequestsPerMin[len(m.RequestsPerMin)-1]++
+	}
+}
+
+func (m *Metrics) GetRPM() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if len(m.RequestsPerMin) == 0 {
+		return 0
+	}
+	return m.RequestsPerMin[len(m.RequestsPerMin)-1]
+}
+
+func (m *Metrics) GetSuccessRate() float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.TotalRequests == 0 {
+		return 100.0
+	}
+	return float64(m.SuccessRequests) / float64(m.TotalRequests) * 100
+}
+
+func (m *Metrics) String() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return fmt.Sprintf("requests=%d, success=%d, failed=%d, rate=%.1f%%, rpm=%d, in_tokens=%d, out_tokens=%d",
+		m.TotalRequests, m.SuccessRequests, m.FailedRequests,
+		m.GetSuccessRate(), m.GetRPM(), m.InputTokens, m.OutputTokens)
+}
+
+var (
+	config      Config
+	accountPool *AccountPool
+	metrics     = &Metrics{RequestsPerMin: make([]int64, 0)}
+)
+
+func NewClient(account *Account) *Client {
+	return &Client{
+		httpClient: &http.Client{Timeout: 120 * time.Second},
+		account:    account,
+	}
+}
+
+func (c *Client) setHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("accept-language", "system")
+	req.Header.Set("cache-control", "no-cache")
+	req.Header.Set("origin", BaseURL)
+	req.Header.Set("referer", BaseURL+"/")
+	req.Header.Set("x-timezone", "Asia/Shanghai")
+	req.Header.Set("Cookie", c.account.Cookie)
+}
+
+func (c *Client) CheckAuth() bool {
+	url := fmt.Sprintf("%s%s", BaseURL, UserCheckAPI)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return false
+	}
+
+	if code, ok := result["code"].(float64); ok {
+		return code == 0
+	}
+
+	return false
+}
+
+type ChatOptions struct {
+	Model           string
+	Temperature     float64
+	TopP            float64
+	EnableThinking  bool
+	EnableWebSearch bool
+	Tools           []Tool
+}
+
+func (c *Client) ChatStream(query string, opts ChatOptions, w http.ResponseWriter) error {
+	conversationID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	msgID := strings.ReplaceAll(uuid.New().String(), "-", "")
+
+	webSearchStatus := "disabled"
+	if opts.EnableWebSearch {
+		webSearchStatus = "enabled"
+	}
+
+	model := opts.Model
+	if model == "" {
+		model = "mimo-v2-flash-studio"
+	}
+
+	reqBody := MimoRequest{
+		MsgID:          msgID,
+		ConversationID: conversationID,
+		Query:          query,
+		ModelConfig: ModelConfig{
+			EnableThinking:  opts.EnableThinking,
+			Temperature:     opts.Temperature,
+			TopP:            opts.TopP,
+			WebSearchStatus: webSearchStatus,
+			Model:           model,
+		},
+		MultiMedias: []interface{}{},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s%s?%s=%s", BaseURL, ChatAPI, PhParam, c.account.Ph)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upstream request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upstream error: status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming not supported")
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	var fullContent strings.Builder
+	inThinking := false
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		data := strings.TrimPrefix(line, "data:")
+		data = strings.TrimSpace(data)
+
+		if config.Debug {
+			log.Printf("[DEBUG] SSE: %s", data)
+		}
+
+		if data == "[DONE]" {
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			break
+		}
+
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			if config.Debug {
+				log.Printf("[DEBUG] JSON parse error: %v", err)
+			}
+			continue
+		}
+
+		content, _ := event["content"].(string)
+		if content == "" {
+			continue
+		}
+
+		content = cleanContent(content)
+		fullContent.WriteString(content)
+
+		if strings.Contains(fullContent.String(), "<think>") && !strings.Contains(fullContent.String(), "</think>") {
+			inThinking = true
+		}
+		if strings.Contains(content, "</think>") {
+			inThinking = false
+			continue
+		}
+		if strings.Contains(content, "<think>") {
+			continue
+		}
+
+		delta := make(map[string]string)
+		if inThinking {
+			delta["reasoning_content"] = content
+		} else {
+			delta["content"] = content
+		}
+
+		chunk := map[string]interface{}{
+			"id":      "chatcmpl-" + msgID,
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   model,
+			"choices": []map[string]interface{}{
+				{
+					"index":         0,
+					"delta":         delta,
+					"finish_reason": nil,
+				},
+			},
+		}
+		chunkJSON, _ := json.Marshal(chunk)
+		fmt.Fprintf(w, "data: %s\n\n", chunkJSON)
+		flusher.Flush()
+	}
+
+	return nil
+}
+
+type ChatResult struct {
+	Content          string
+	ReasoningContent string
+	ToolCalls        []ToolCall
+}
+
+func cleanContent(s string) string {
+	s = strings.ReplaceAll(s, "\u0000", "")
+	s = strings.ReplaceAll(s, "[DONE]", "")
+	s = strings.ReplaceAll(s, "webSearch", "")
+	s = strings.TrimSpace(s)
+	return s
+}
+
+type ToolCallResponse struct {
+	ToolCalls []struct {
+		Name      string                 `json:"name"`
+		Arguments map[string]interface{} `json:"arguments"`
+	} `json:"tool_calls"`
+}
+
+func parseToolCalls(content string) ([]ToolCall, string) {
+	var jsonStr string
+	var remainingContent string
+
+	jsonStart := strings.Index(content, "```json")
+	jsonEnd := strings.LastIndex(content, "```")
+
+	if jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart {
+		jsonStr = strings.TrimSpace(content[jsonStart+7 : jsonEnd])
+		remainingContent = strings.TrimSpace(content[:jsonStart])
+	} else {
+		toolCallStart := strings.Index(content, `{"tool_calls"`)
+		if toolCallStart == -1 {
+			return nil, content
+		}
+		jsonStr = strings.TrimSpace(content[toolCallStart:])
+		remainingContent = strings.TrimSpace(content[:toolCallStart])
+	}
+
+	var toolResp ToolCallResponse
+	if err := json.Unmarshal([]byte(jsonStr), &toolResp); err != nil {
+		return nil, content
+	}
+
+	if len(toolResp.ToolCalls) == 0 {
+		return nil, content
+	}
+
+	toolCalls := make([]ToolCall, len(toolResp.ToolCalls))
+	for i, tc := range toolResp.ToolCalls {
+		args, _ := json.Marshal(tc.Arguments)
+		toolCalls[i] = ToolCall{
+			ID:   fmt.Sprintf("call_%s", uuid.New().String()[:8]),
+			Type: "function",
+		}
+		toolCalls[i].Function.Name = tc.Name
+		toolCalls[i].Function.Arguments = string(args)
+	}
+
+	return toolCalls, remainingContent
+}
+
+func extractThinking(content string) (text string, thinking string) {
+	content = cleanContent(content)
+
+	thinkStart := strings.Index(content, "<think>")
+	thinkEnd := strings.Index(content, "</think>")
+
+	if thinkStart != -1 && thinkEnd != -1 && thinkEnd > thinkStart {
+		thinking = strings.TrimSpace(content[thinkStart+7 : thinkEnd])
+		text = strings.TrimSpace(content[:thinkStart] + content[thinkEnd+8:])
+	} else {
+		text = content
+	}
+
+	text = cleanContent(text)
+	thinking = cleanContent(thinking)
+	return
+}
+
+func (c *Client) Chat(query string, opts ChatOptions) (*ChatResult, error) {
+	conversationID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	msgID := strings.ReplaceAll(uuid.New().String(), "-", "")
+
+	webSearchStatus := "disabled"
+	if opts.EnableWebSearch {
+		webSearchStatus = "enabled"
+	}
+
+	model := opts.Model
+	if model == "" {
+		model = "mimo-v2-flash-studio"
+	}
+
+	reqBody := MimoRequest{
+		MsgID:          msgID,
+		ConversationID: conversationID,
+		Query:          query,
+		ModelConfig: ModelConfig{
+			EnableThinking:  opts.EnableThinking,
+			Temperature:     opts.Temperature,
+			TopP:            opts.TopP,
+			WebSearchStatus: webSearchStatus,
+			Model:           model,
+		},
+		MultiMedias: []interface{}{},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s%s?%s=%s", BaseURL, ChatAPI, PhParam, c.account.Ph)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("upstream request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("upstream error: status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	var content strings.Builder
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		data := strings.TrimPrefix(line, "data:")
+		data = strings.TrimSpace(data)
+
+		if config.Debug {
+			log.Printf("[DEBUG] SSE: %s", data)
+		}
+
+		if data == "[DONE]" {
+			break
+		}
+
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			if config.Debug {
+				log.Printf("[DEBUG] JSON parse error: %v", err)
+			}
+			continue
+		}
+
+		eventType, hasType := event["type"].(string)
+		eventContent, _ := event["content"].(string)
+
+		if !hasType || eventType == "" {
+			if config.Debug {
+				log.Printf("[DEBUG] Skipping event without type: %v", event)
+			}
+			continue
+		}
+
+		if eventContent == "" || eventContent == "[DONE]" {
+			continue
+		}
+
+		if eventContent == "webSearch" || eventContent == "thinking" {
+			continue
+		}
+
+		content.WriteString(eventContent)
+	}
+
+	fullContent := content.String()
+	if config.Debug {
+		log.Printf("[DEBUG] Full content: %s", fullContent)
+	}
+	text, thinking := extractThinking(fullContent)
+	if config.Debug {
+		log.Printf("[DEBUG] Extracted - text: %s, thinking: %s", text, thinking)
+	}
+
+	toolCalls, remainingText := parseToolCalls(text)
+	if config.Debug && len(toolCalls) > 0 {
+		log.Printf("[DEBUG] Parsed tool calls: %v", toolCalls)
+	}
+
+	return &ChatResult{
+		Content:          remainingText,
+		ReasoningContent: thinking,
+		ToolCalls:        toolCalls,
+	}, nil
+}
+
+func NewAccountPool() *AccountPool {
+	return &AccountPool{
+		accounts: make([]*Account, 0),
+	}
+}
+
+func (p *AccountPool) Add(account *Account) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.accounts = append(p.accounts, account)
+}
+
+func (p *AccountPool) Next() *Account {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.accounts) == 0 {
+		return nil
+	}
+
+	validAccounts := make([]*Account, 0)
+	for _, acc := range p.accounts {
+		if acc.Valid {
+			validAccounts = append(validAccounts, acc)
+		}
+	}
+
+	if len(validAccounts) == 0 {
+		return nil
+	}
+
+	idx := atomic.AddUint64(&p.index, 1) - 1
+	return validAccounts[idx%uint64(len(validAccounts))]
+}
+
+func (p *AccountPool) Count() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.accounts)
+}
+
+func (p *AccountPool) ValidCount() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	count := 0
+	for _, acc := range p.accounts {
+		if acc.Valid {
+			count++
+		}
+	}
+	return count
+}
+
+func (p *AccountPool) SetValid(name string, valid bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, acc := range p.accounts {
+		if acc.Name == name {
+			acc.Valid = valid
+			break
+		}
+	}
+}
+
+func (p *AccountPool) GetAll() []*Account {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	result := make([]*Account, len(p.accounts))
+	copy(result, p.accounts)
+	return result
+}
+
+func startAuthChecker(interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		checkAll := func() {
+			accounts := accountPool.GetAll()
+			validCount := 0
+			for _, acc := range accounts {
+				client := NewClient(acc)
+				valid := client.CheckAuth()
+				if valid {
+					validCount++
+				}
+				if acc.Valid != valid {
+					accountPool.SetValid(acc.Name, valid)
+					if valid {
+					} else {
+						log.Printf("[WARN] 账号 %s 鉴权失效", acc.Name)
+					}
+				}
+			}
+			if config.Debug {
+			}
+		}
+		checkAll()
+		for range ticker.C {
+			checkAll()
+		}
+	}()
+}
+
+func loadConfig() error {
+	data, err := os.ReadFile("config.json")
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &config)
+}
+
+func loadAccounts(dataDir string) error {
+	accountPool = NewAccountPool()
+
+	files, err := filepath.Glob(filepath.Join(dataDir, "*.json"))
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			log.Printf("[ERROR] 读取账号文件失败 %s: %v", file, err)
+			continue
+		}
+
+		var account Account
+		if err := json.Unmarshal(data, &account); err != nil {
+			log.Printf("[ERROR] 解析账号文件失败 %s: %v", file, err)
+			continue
+		}
+
+		accountPool.Add(&account)
+		log.Printf("[INFO] 加载账号: %s", account.Name)
+	}
+
+	return nil
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		log.Printf("[HTTP] --> %s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
+
+		next(rw, r)
+
+		log.Printf("[HTTP] <-- %s %s %d %v", r.Method, r.URL.Path, rw.statusCode, time.Since(start))
+	}
+}
+
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth == "" {
+			log.Printf("[WARN] 请求缺少认证头: %s %s", r.Method, r.URL.Path)
+			http.Error(w, `{"error": "missing authorization header"}`, http.StatusUnauthorized)
+			return
+		}
+
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token != config.APIKey {
+			log.Printf("[WARN] API Key 无效: %s %s", r.Method, r.URL.Path)
+			http.Error(w, `{"error": "invalid api key"}`, http.StatusUnauthorized)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+func buildQuery(messages []Message, tools []Tool) string {
+	var sb strings.Builder
+	var systemPrompts []string
+
+	for _, msg := range messages {
+		if msg.Role == "system" {
+			systemPrompts = append(systemPrompts, getMessageContent(msg))
+		}
+	}
+
+	if len(systemPrompts) > 0 {
+		sb.WriteString("# 系统指令\n\n")
+		for _, sp := range systemPrompts {
+			sb.WriteString(sp)
+			sb.WriteString("\n\n")
+		}
+	}
+
+	if len(tools) > 0 {
+		sb.WriteString("# 可用工具\n\n")
+		sb.WriteString("**重要：当用户的请求需要获取实时数据或执行操作时，你必须调用相应的工具，不要直接回答。**\n\n")
+		sb.WriteString("你可以调用以下工具:\n\n")
+		for i, tool := range tools {
+			sb.WriteString(fmt.Sprintf("## 工具 %d: %s\n", i+1, tool.Function.Name))
+			if tool.Function.Description != "" {
+				sb.WriteString(fmt.Sprintf("- 描述: %s\n", tool.Function.Description))
+			}
+			if tool.Function.Parameters != nil {
+				params, _ := json.MarshalIndent(tool.Function.Parameters, "", "  ")
+				sb.WriteString(fmt.Sprintf("- 参数:\n```json\n%s\n```\n", string(params)))
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("## 工具调用规则\n\n")
+		sb.WriteString("1. 当用户请求涉及工具能力范围内的操作时，**必须**调用工具\n")
+		sb.WriteString("2. 不要自己编造数据，应该通过工具获取真实数据\n")
+		sb.WriteString("3. 可以同时调用多个工具\n\n")
+		sb.WriteString("## 工具调用格式\n\n")
+		sb.WriteString("调用工具时，只输出以下JSON格式，不要添加其他内容:\n")
+		sb.WriteString("```json\n{\"tool_calls\": [{\"name\": \"工具名称\", \"arguments\": {\"参数名\": \"参数值\"}}]}\n```\n\n")
+		sb.WriteString("---\n\n")
+	}
+
+	sb.WriteString("# 对话历史\n\n")
+	for _, msg := range messages {
+		if msg.Role == "system" {
+			continue
+		}
+
+		content := getMessageContent(msg)
+
+		switch msg.Role {
+		case "user":
+			sb.WriteString(fmt.Sprintf("**用户**: %s\n\n", content))
+		case "assistant":
+			if len(msg.ToolCalls) > 0 {
+				toolCallsJSON, _ := json.Marshal(msg.ToolCalls)
+				sb.WriteString(fmt.Sprintf("**助手**: [调用工具] %s\n\n", string(toolCallsJSON)))
+			} else if content != "" {
+				sb.WriteString(fmt.Sprintf("**助手**: %s\n\n", content))
+			}
+		case "tool":
+			sb.WriteString(fmt.Sprintf("**工具结果** (id: %s): %s\n\n", msg.ToolCallID, content))
+		}
+	}
+
+	return sb.String()
+}
+
+func getMessageContent(msg Message) string {
+	switch v := msg.Content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		var sb strings.Builder
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				if text, ok := m["text"].(string); ok {
+					sb.WriteString(text)
+				}
+			}
+		}
+		return sb.String()
+	default:
+		return ""
+	}
+}
+
+func chatHandler(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+
+	if r.Method != http.MethodPost {
+		log.Printf("[WARN] 方法不允许: %s", r.Method)
+		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req APIChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[ERROR] 解析请求失败: %v", err)
+		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Messages) == 0 {
+		log.Printf("[WARN] 请求缺少 messages")
+		http.Error(w, `{"error": "messages required"}`, http.StatusBadRequest)
+		return
+	}
+
+	model := req.Model
+	if model == "" {
+		model = "mimo-v2-flash-studio"
+	}
+
+	parsedModel, err := parseModelName(model)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	temperature := 0.8
+	if req.Temperature != nil {
+		temperature = *req.Temperature
+	}
+
+	topP := 0.95
+	if req.TopP != nil {
+		topP = *req.TopP
+	}
+
+	query := buildQuery(req.Messages, req.Tools)
+
+	if config.Debug {
+		log.Printf("[DEBUG] Messages count: %d", len(req.Messages))
+		for i, msg := range req.Messages {
+			log.Printf("[DEBUG] Message %d: role=%s, content=%v, tool_calls=%d", i, msg.Role, msg.Content, len(msg.ToolCalls))
+		}
+		log.Printf("[DEBUG] Built query:\n%s", query)
+	}
+
+	opts := ChatOptions{
+		Model:           parsedModel.BaseModel,
+		Temperature:     temperature,
+		TopP:            topP,
+		EnableThinking:  parsedModel.EnableThinking,
+		EnableWebSearch: parsedModel.EnableSearch,
+		Tools:           req.Tools,
+	}
+
+	account := accountPool.Next()
+	if account == nil {
+		log.Printf("[ERROR] 无可用账号")
+		http.Error(w, `{"error": "no available accounts"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	log.Printf("[INFO] 请求: model=%s, stream=%v, messages=%d, tools=%d, account=%s",
+		model, req.Stream, len(req.Messages), len(req.Tools), account.Name)
+
+	client := NewClient(account)
+
+	inputTokens := len(query)
+
+	if req.Stream {
+		if err := client.ChatStream(query, opts, w); err != nil {
+			log.Printf("[ERROR] 流式请求失败: %v", err)
+			metrics.RecordRequest(false, inputTokens, 0)
+			log.Printf("[METRICS] %s", metrics.String())
+		} else {
+			metrics.RecordRequest(true, inputTokens, 0)
+		}
+		log.Printf("[INFO] 流式请求完成, 耗时: %v", time.Since(startTime))
+		return
+	}
+
+	response, err := client.Chat(query, opts)
+	if err != nil {
+		log.Printf("[ERROR] 请求失败: %v", err)
+		metrics.RecordRequest(false, inputTokens, 0)
+		log.Printf("[METRICS] %s", metrics.String())
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	outputTokens := len(response.Content)
+	metrics.RecordRequest(true, inputTokens, outputTokens)
+	log.Printf("[INFO] 请求完成, 耗时: %v, tool_calls=%d, in=%d, out=%d",
+		time.Since(startTime), len(response.ToolCalls), inputTokens, outputTokens)
+	log.Printf("[METRICS] %s", metrics.String())
+
+	message := map[string]interface{}{
+		"role": "assistant",
+	}
+
+	finishReason := "stop"
+	if len(response.ToolCalls) > 0 {
+		message["content"] = nil
+		message["tool_calls"] = response.ToolCalls
+		finishReason = "tool_calls"
+	} else {
+		message["content"] = response.Content
+	}
+
+	if response.ReasoningContent != "" {
+		message["reasoning_content"] = response.ReasoningContent
+	}
+
+	result := map[string]interface{}{
+		"id":      "chatcmpl-" + uuid.New().String(),
+		"object":  "chat.completion",
+		"created": time.Now().Unix(),
+		"model":   model,
+		"choices": []map[string]interface{}{
+			{
+				"index":         0,
+				"message":       message,
+				"finish_reason": finishReason,
+			},
+		},
+		"usage": map[string]int{
+			"prompt_tokens":     len(query),
+			"completion_tokens": len(response.Content),
+			"total_tokens":      len(query) + len(response.Content),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func modelsHandler(w http.ResponseWriter, r *http.Request) {
+	data := make([]map[string]interface{}, 0)
+	for _, model := range getSupportedModels() {
+		data = append(data, map[string]interface{}{
+			"id":       model,
+			"object":   "model",
+			"created":  time.Now().Unix(),
+			"owned_by": "xiaomi",
+		})
+	}
+	models := map[string]interface{}{
+		"object": "list",
+		"data":   data,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models)
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	metrics.mu.RLock()
+	defer metrics.mu.RUnlock()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head>
+    <title>Xiaomi API Metrics</title>
+    <meta http-equiv="refresh" content="5">
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+        h1 { color: #00ff00; }
+        .metric { margin: 10px 0; padding: 10px; background: #2a2a2a; border-radius: 5px; }
+        .label { color: #888; }
+        .value { color: #00ff00; font-weight: bold; }
+        .error { color: #ff4444; }
+        .success { color: #44ff44; }
+    </style>
+</head>
+<body>
+    <h1>📊 Xiaomi API Metrics</h1>
+    <div class="metric"><span class="label">总请求数:</span> <span class="value">%d</span></div>
+    <div class="metric"><span class="label">成功请求:</span> <span class="success">%d</span></div>
+    <div class="metric"><span class="label">失败请求:</span> <span class="error">%d</span></div>
+    <div class="metric"><span class="label">成功率:</span> <span class="value">%.1f%%</span></div>
+    <div class="metric"><span class="label">RPM (每分钟请求):</span> <span class="value">%d</span></div>
+    <div class="metric"><span class="label">输入 Tokens:</span> <span class="value">%d</span></div>
+    <div class="metric"><span class="label">输出 Tokens:</span> <span class="value">%d</span></div>
+    <div class="metric"><span class="label">有效账号:</span> <span class="value">%d / %d</span></div>
+    <p style="color:#666;font-size:12px;">页面每5秒自动刷新</p>
+</body>
+</html>`,
+		metrics.TotalRequests,
+		metrics.SuccessRequests,
+		metrics.FailedRequests,
+		metrics.GetSuccessRate(),
+		metrics.GetRPM(),
+		metrics.InputTokens,
+		metrics.OutputTokens,
+		accountPool.ValidCount(),
+		accountPool.Count(),
+	)
+}
+
+func main() {
+	if err := loadConfig(); err != nil {
+		log.Fatalf("加载配置失败: %v", err)
+	}
+
+	if err := loadAccounts("data"); err != nil {
+		log.Fatalf("加载账号失败: %v", err)
+	}
+
+	interval := config.AuthCheckInterval
+	if interval <= 0 {
+		interval = 300
+	}
+	startAuthChecker(time.Duration(interval) * time.Second)
+
+	http.HandleFunc("/", metricsHandler)
+	http.HandleFunc("/v1/chat/completions", loggingMiddleware(authMiddleware(chatHandler)))
+	http.HandleFunc("/v1/models", loggingMiddleware(authMiddleware(modelsHandler)))
+
+	addr := fmt.Sprintf(":%d", config.Port)
+	log.Printf("[INFO] API 服务启动: http://localhost%s", addr)
+	log.Printf("[INFO] 账号数: %d, 鉴权检查间隔: %ds", accountPool.Count(), interval)
+
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatalf("服务启动失败: %v", err)
+	}
+}

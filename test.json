@@ -1,0 +1,6 @@
+{
+  "model": "mimo-v2-flash-studio",
+  "messages": [
+    {"role": "user", "content": "你好"}
+  ]
+}

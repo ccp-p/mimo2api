@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiMo2API 管理面板</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e2e8f0; min-height: 100vh; }
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-bottom: 1px solid #2d3748; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  .logo { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, #f97316, #ea580c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .badge { background: #1e293b; border: 1px solid #334155; border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.75rem; color: #94a3b8; }
+  .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  .card { background: #1a1a2e; border: 1px solid #2d3748; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .card h2 { font-size: 1rem; font-weight: 600; color: #f1f5f9; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .card h2 svg { width: 1rem; height: 1rem; opacity: 0.7; }
+  label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.4rem; margin-top: 0.8rem; }
+  label:first-child { margin-top: 0; }
+  input, textarea { width: 100%; background: #0f0f13; border: 1px solid #334155; border-radius: 8px; padding: 0.6rem 0.8rem; color: #e2e8f0; font-size: 0.875rem; font-family: 'JetBrains Mono', 'Consolas', monospace; resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: #f97316; }
+  textarea { min-height: 80px; }
+  .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 8px; border: none; cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
+  .btn-primary { background: linear-gradient(135deg, #f97316, #ea580c); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; }
+  .btn-secondary:hover { background: #263348; }
+  .btn-danger { background: #7f1d1d; border: 1px solid #991b1b; color: #fca5a5; }
+  .btn-danger:hover { background: #991b1b; }
+  .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+  .btn-group { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+  .account-list { list-style: none; }
+  .account-item { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; margin-bottom: 0.5rem; }
+  .account-info { display: flex; align-items: center; gap: 0.75rem; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-valid { background: #22c55e; box-shadow: 0 0 6px #22c55e80; }
+  .dot-invalid { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
+  .account-name { font-weight: 500; font-size: 0.9rem; }
+  .account-actions { display: flex; gap: 0.5rem; }
+  .config-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 1rem; font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 0.8rem; color: #94a3b8; line-height: 1.8; }
+  .config-box span { color: #f97316; }
+  .divider { border: none; border-top: 1px solid #1e293b; margin: 1rem 0; }
+  .alert { padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.875rem; margin-top: 0.75rem; display: none; }
+  .alert-success { background: #14532d; border: 1px solid #166534; color: #86efac; }
+  .alert-error { background: #7f1d1d; border: 1px solid #991b1b; color: #fca5a5; }
+  .empty { text-align: center; padding: 2rem; color: #475569; font-size: 0.875rem; }
+  .section-tip { font-size: 0.78rem; color: #64748b; margin-top: 0.5rem; line-height: 1.6; }
+  .steps { counter-reset: step; }
+  .step { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; align-items: flex-start; }
+  .step-num { counter-increment: step; background: #1e293b; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: #f97316; flex-shrink: 0; font-weight: 600; }
+  .step-text { font-size: 0.85rem; color: #94a3b8; line-height: 1.6; }
+  .step-text code { background: #1e293b; padding: 0.1rem 0.4rem; border-radius: 4px; color: #f97316; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+  .tab-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .tab { padding: 0.4rem 1rem; border-radius: 6px; border: 1px solid #334155; background: transparent; color: #64748b; cursor: pointer; font-size: 0.85rem; transition: all 0.15s; }
+  .tab.active { background: #1e293b; color: #f97316; border-color: #f97316; }
+  #toast { position: fixed; bottom: 2rem; right: 2rem; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.75rem 1.25rem; font-size: 0.875rem; color: #e2e8f0; display: none; z-index: 9999; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  /* 调试对话 */
+  .debug-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+  .debug-row textarea { flex: 1; min-height: 60px; resize: vertical; }
+  .debug-send { flex-shrink: 0; align-self: flex-end; padding: 0.55rem 1.1rem; }
+  .chat-box { background: #0a0a10; border: 1px solid #1e293b; border-radius: 10px; padding: 1rem; min-height: 180px; max-height: 420px; overflow-y: auto; font-size: 0.875rem; line-height: 1.7; display: flex; flex-direction: column; gap: 0.75rem; }
+  .chat-msg { display: flex; flex-direction: column; gap: 0.25rem; }
+  .chat-msg.user { align-items: flex-end; }
+  .chat-msg.assistant { align-items: flex-start; }
+  .chat-bubble { padding: 0.55rem 0.9rem; border-radius: 10px; max-width: 85%; word-break: break-word; white-space: pre-wrap; }
+  .chat-msg.user .chat-bubble { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; border-bottom-right-radius: 3px; }
+  .chat-msg.assistant .chat-bubble { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 3px; }
+  .chat-thinking { background: #0f172a; border: 1px solid #2d3748; border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 0.78rem; color: #64748b; font-style: italic; max-width: 85%; }
+  .chat-thinking summary { cursor: pointer; color: #94a3b8; font-style: normal; font-weight: 500; margin-bottom: 0.3rem; }
+  .chat-meta { font-size: 0.72rem; color: #475569; padding: 0 0.2rem; }
+  .debug-opts { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
+  .debug-opts select { background: #0f0f13; border: 1px solid #334155; border-radius: 8px; padding: 0.45rem 0.7rem; color: #e2e8f0; font-size: 0.85rem; }
+  .debug-opts select:focus { outline: none; border-color: #f97316; }
+  .typing-cursor { display: inline-block; width: 2px; height: 1em; background: #f97316; margin-left: 2px; animation: blink 0.8s step-end infinite; vertical-align: text-bottom; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .chat-empty { color: #475569; text-align: center; font-size: 0.85rem; padding: 2.5rem 0; }
+  .token-badge { display: inline-flex; gap: 0.4rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.72rem; color: #64748b; margin-top: 0.4rem; }
+  .token-badge span { color: #f97316; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🔥 MiMo2API</div>
+    <div class="badge">OpenAI 兼容代理</div>
+    <div style="flex:1"></div>
+    <div class="badge" id="serverStatus">运行中</div>
+  </div>
+
+<div class="container">
+
+  <!-- 快速开始 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      快速开始 — 如何获取 Cookie
+    </h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-text">打开 <code>https://aistudio.xiaomimimo.com</code>，登录你的小米账号</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">按 <code>F12</code> 打开开发123者工具，切换到 <code>Network</code> 标签</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">在聊天框发送任意消息，筛选 <code>chat</code> 请求</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text">右键该请求 → <code>Copy as cURL</code>，粘贴到下方解析框</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-text">点击「解析 cURL」自动提取凭证，然后添加账号即可</div></div>
+    </div>
+  </div>
+
+  <!-- API Key 配置 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      API Key 配置
+    </h2>
+    <p class="section-tip">设置 API Key 用于接口鉴权，支持多个 Key（用逗号分隔）</p>
+    <label>API Keys（多个用逗号分隔）</label>
+    <input type="text" id="apiKeysInput" placeholder="sk-key1, sk-key2, sk-key3">
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveAPIKeys()">💾 保存</button>
+      <button class="btn btn-secondary" onclick="loadAPIKeys()">🔄 刷新</button>
+    </div>
+    <div id="apiKeyAlert" class="alert"></div>
+  </div>
+
+  <!-- 添加账号 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      添加账号
+    </h2>
+
+    <div class="tab-row">
+      <button class="tab active" onclick="switchTab('curl', event)">粘贴 cURL 自动解析</button>
+      <button class="tab" onclick="switchTab('manual', event)">手动填写</button>
+    </div>
+
+    <!-- cURL 模式 -->
+    <div id="tabCurl">
+      <label>cURL 命令（从浏览器开发者工具复制）</label>
+      <textarea id="curlInput" placeholder="curl 'https://aistudio.xiaomimimo.com/open-apis/bot/chat' \&#10;  -H 'Cookie: serviceToken=...; userId=...; xiaomichatbot_ph=...' \&#10;  ..."></textarea>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="parseCurl()">🔍 解析 cURL</button>
+      </div>
+      <div id="parseResult" style="display:none; margin-top: 1rem;">
+        <hr class="divider">
+        <label>账号名称（可选）</label>
+        <input type="text" id="parsedName" placeholder="留空自动生成">
+        <label>提取到的 Cookie</label>
+        <input type="text" id="parsedCookie" readonly>
+        <label>提取到的 xiaomichatbot_ph</label>
+        <input type="text" id="parsedPh" readonly>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="addFromParsed()">✅ 添加此账号</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手动模式 -->
+    <div id="tabManual" style="display:none;">
+      <label>账号名称（可选）</label>
+      <input type="text" id="manualName" placeholder="留空自动生成">
+      <label>Cookie（完整字符串，包含 serviceToken 和 userId）</label>
+      <textarea id="manualCookie" placeholder="serviceToken=xxxxx; userId=12345678; xiaomichatbot_ph=yyyyy; ..."></textarea>
+      <label>xiaomichatbot_ph（若 Cookie 中已包含可留空）</label>
+      <input type="text" id="manualPh" placeholder="yyyyy（可选，优先从 Cookie 提取）">
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="addManual()">✅ 添加账号</button>
+      </div>
+    </div>
+
+    <div id="addAlert" class="alert"></div>
+  </div>
+
+  <!-- 账号列表 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      账号列表
+    </h2>
+    <ul class="account-list" id="accountList">
+      <li class="empty">加载中…</li>
+    </ul>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="loadAccounts()">🔄 刷新</button>
+      <button class="btn btn-secondary btn-sm" onclick="reloadAll()">♻️ 重新加载配置文件</button>
+    </div>
+  </div>
+
+  <!-- 对话调试 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      对话调试
+    </h2>
+
+    <div class="debug-opts">
+      <div style="display:flex;flex-direction:column;gap:0.3rem;">
+        <label style="margin:0">账号</label>
+        <select id="debugAccount">
+          <option value="">自动选择</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.3rem;">
+        <label style="margin:0">模型</label>
+        <select id="debugModel">
+          <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
+          <option value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
+          <option value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
+          <option value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
+        </select>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:flex-end">
+        <button class="btn btn-secondary btn-sm" onclick="clearChat()">🗑️ 清空</button>
+      </div>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+      <div class="chat-empty" id="chatEmpty">发送消息开始调试对话 ↓</div>
+    </div>
+
+    <div class="debug-row" style="margin-top:0.75rem">
+      <textarea id="debugInput" placeholder="输入消息，按 Ctrl+Enter 发送…" onkeydown="handleDebugKey(event)"></textarea>
+      <button class="btn btn-primary debug-send" id="debugSendBtn" onclick="sendDebugChat()">发送</button>
+    </div>
+  </div>
+
+  <!-- Claude Code 使用说明 -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      在 Claude Code 中使用
+    </h2>
+    <div class="config-box">
+      # 设置环境变量（也可写入 .bashrc / .zshrc）<br>
+      <span>export</span> ANTHROPIC_BASE_URL=<span>"http://localhost:8080/v1"</span><br>
+      <span>export</span> ANTHROPIC_API_KEY=<span>"sk-mimo"</span>  <em style="color:#475569"># 可在启动时通过 -key 参数自定义</em><br><br>
+      # 启动 Claude Code<br>
+      <span>claude</span> --model mimo-v2-flash-studio
+    </div>
+    <hr class="divider">
+    <p class="section-tip">
+      支持的模型名：<code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
+      · <code style="color:#f97316">mimo-v2-flash-studio-thinking</code>（深度思考）
+      · <code style="color:#f97316">mimo-v2-flash-studio-search</code>（联网搜索）
+      · <code style="color:#f97316">mimo-v2-flash-studio-thinking-search</code>（思考+搜索）
+    </p>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+  <script>
+  let accounts = [];
+
+  async function api(path, method = 'GET', body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch('/admin' + path, opts);
+    return res.json();
+  }
+
+  function toast(msg, err) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = err ? '#7f1d1d' : '#14532d';
+    el.style.borderColor = err ? '#991b1b' : '#166534';
+    el.style.color = err ? '#fca5a5' : '#86efac';
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 3000);
+  }
+
+  function switchTab(tab, event) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tabCurl').style.display = tab === 'curl' ? 'block' : 'none';
+    document.getElementById('tabManual').style.display = tab === 'manual' ? 'block' : 'none';
+    if (event && event.target) {
+      event.target.classList.add('active');
+    }
+  }
+
+  async function parseCurl() {
+    const curl = document.getElementById('curlInput').value.trim();
+    if (!curl) { toast('请先粘贴 cURL 命令', true); return; }
+    const data = await api('/parse-curl', 'POST', { curl });
+    if (!data.cookie) { toast('解析失败，请确认 cURL 包含 Cookie 头', true); return; }
+    document.getElementById('parsedCookie').value = data.cookie;
+    document.getElementById('parsedPh').value = data.ph || '';
+    document.getElementById('parseResult').style.display = 'block';
+    toast('解析成功！');
+  }
+
+  async function addFromParsed() {
+    const cookie = document.getElementById('parsedCookie').value.trim();
+    const ph = document.getElementById('parsedPh').value.trim();
+    const name = document.getElementById('parsedName').value.trim();
+    if (!cookie) { toast('Cookie 为空', true); return; }
+    await doAdd(name, cookie, ph);
+    document.getElementById('parseResult').style.display = 'none';
+    document.getElementById('curlInput').value = '';
+  }
+
+  async function addManual() {
+    const cookie = document.getElementById('manualCookie').value.trim();
+    let ph = document.getElementById('manualPh').value.trim();
+    const name = document.getElementById('manualName').value.trim();
+    if (!cookie) { toast('Cookie 不能为空', true); return; }
+    // 从 cookie 中提取 ph
+    if (!ph) {
+      const match = cookie.match(/xiaomichatbot_ph=([^;]+)/);
+      if (match) ph = match[1].trim();
+    }
+    await doAdd(name, cookie, ph);
+  }
+
+  async function doAdd(name, cookie, ph) {
+    const data = await api('/accounts/add', 'POST', { name, cookie, ph });
+    if (data.ok) {
+      toast('账号 ' + (data.name || name) + ' 添加成功');
+      loadAccounts();
+    } else {
+      toast(data.error || '添加失败', true);
+    }
+  }
+
+  async function deleteAccount(name) {
+    if (!confirm('确认删除账号「' + name + '」？')) return;
+    await api('/accounts/delete', 'POST', { name });
+    toast('已删除 ' + name);
+    loadAccounts();
+  }
+
+  async function testAccount(name) {
+    toast('测试中，请稍候…');
+    const data = await api('/accounts/test', 'POST', { name });
+    if (data.valid) {
+      toast('✅ 账号 ' + name + ' 有效');
+    } else {
+      toast('❌ 账号 ' + name + ' 失效：' + (data.error || ''), true);
+    }
+    loadAccounts();
+  }
+
+  async function loadAccounts() {
+    const data = await api('/accounts');
+    accounts = data.accounts || [];
+    const list = document.getElementById('accountList');
+    if (!accounts.length) {
+      list.innerHTML = '<li class="empty">暂无账号，请先添加</li>';
+      updateDebugAccountSelect && updateDebugAccountSelect();
+      return;
+    }
+    list.innerHTML = accounts.map(a => `
+      <li class="account-item">
+        <div class="account-info">
+          <div class="status-dot ${a.valid ? 'dot-valid' : 'dot-invalid'}"></div>
+          <span class="account-name">${a.name}</span>
+          <span style="font-size:0.75rem;color:#475569">${a.valid ? '可用' : '失效'}</span>
+        </div>
+        <div class="account-actions">
+          <button class="btn btn-secondary btn-sm" onclick="testAccount('${a.name}')">测试</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAccount('${a.name}')">删除</button>
+        </div>
+      </li>
+    `).join('');
+    updateDebugAccountSelect && updateDebugAccountSelect();
+  }
+
+  async function reloadAll() {
+    const data = await api('/reload', 'POST');
+    if (data.ok) {
+      toast('重新加载成功，共 ' + (data.accounts || []).length + ' 个账号');
+      loadAccounts();
+    } else {
+      toast(data.error || '加载失败', true);
+    }
+  }
+
+  loadAccounts();
+  loadAPIKeys();
+
+  // ——— API Key 配置 ———
+
+  async function loadAPIKeys() {
+    const data = await api('/config/api-keys');
+    if (data.api_keys) {
+      document.getElementById('apiKeysInput').value = data.api_keys.join(', ');
+    }
+  }
+
+  async function saveAPIKeys() {
+    const input = document.getElementById('apiKeysInput').value.trim();
+    const data = await api('/config/api-keys/set', 'POST', { keys: input });
+    const alertEl = document.getElementById('apiKeyAlert');
+    if (data.ok) {
+      alertEl.textContent = '保存成功！当前 Keys: ' + data.api_keys.join(', ');
+      alertEl.className = 'alert alert-success';
+      alertEl.style.display = 'block';
+      // 同时更新使用说明中的 API Key
+      updateUsageGuide(data.api_keys[0]);
+    } else {
+      alertEl.textContent = '保存失败: ' + (data.error || '未知错误');
+      alertEl.className = 'alert alert-error';
+      alertEl.style.display = 'block';
+    }
+    setTimeout(() => alertEl.style.display = 'none', 4000);
+  }
+
+  function updateUsageGuide(key) {
+    // 更新使用说明中的 API Key 显示
+    const guideBox = document.querySelector('.config-box');
+    if (guideBox) {
+      const lines = guideBox.innerHTML.split('<br>');
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('ANTHROPIC_API_KEY')) {
+          lines[i] = lines[i].replace(/sk-mimo|"[^"]*"/, '"' + (key || 'sk-mimo') + '"');
+        }
+      }
+      guideBox.innerHTML = lines.join('<br>');
+    }
+  }
+
+  // ——— 调试对话 ———
+
+  let debugSending = false;
+
+  function updateDebugAccountSelect() {
+    const sel = document.getElementById('debugAccount');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">自动选择</option>';
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.name;
+      opt.textContent = a.name + (a.valid ? '' : ' ⚠️');
+      sel.appendChild(opt);
+    });
+    if (cur) sel.value = cur;
+  }
+
+  function handleDebugKey(e) {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      sendDebugChat();
+    }
+  }
+
+  function clearChat() {
+    const box = document.getElementById('chatBox');
+    box.innerHTML = '<div class="chat-empty" id="chatEmpty">发送消息开始调试对话 ↓</div>';
+  }
+
+  function appendUserMsg(text) {
+    const box = document.getElementById('chatBox');
+    const empty = document.getElementById('chatEmpty');
+    if (empty) empty.remove();
+
+    const el = document.createElement('div');
+    el.className = 'chat-msg user';
+    el.innerHTML = `<div class="chat-bubble">${escHtml(text)}</div>`;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+    return el;
+  }
+
+  function createAssistantMsg() {
+    const box = document.getElementById('chatBox');
+    const empty = document.getElementById('chatEmpty');
+    if (empty) empty.remove();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-msg assistant';
+
+    const thinkEl = document.createElement('details');
+    thinkEl.className = 'chat-thinking';
+    thinkEl.style.display = 'none';
+    thinkEl.innerHTML = '<summary>💭 深度思考</summary><div class="think-body"></div>';
+
+    const bubbleEl = document.createElement('div');
+    bubbleEl.className = 'chat-bubble';
+    bubbleEl.innerHTML = '<span class="typing-cursor"></span>';
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'chat-meta';
+
+    wrapper.appendChild(thinkEl);
+    wrapper.appendChild(bubbleEl);
+    wrapper.appendChild(metaEl);
+    box.appendChild(wrapper);
+    box.scrollTop = box.scrollHeight;
+    return { wrapper, thinkEl, bubbleEl, metaEl };
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function sendDebugChat() {
+    if (debugSending) return;
+    const input = document.getElementById('debugInput');
+    const message = input.value.trim();
+    if (!message) { toast('请输入消息内容', true); return; }
+
+    const accountName = document.getElementById('debugAccount').value;
+    const model = document.getElementById('debugModel').value;
+
+    if (accounts.length === 0) {
+      toast('请先添加账号', true);
+      return;
+    }
+
+    debugSending = true;
+    const btn = document.getElementById('debugSendBtn');
+    btn.disabled = true;
+    btn.textContent = '发送中…';
+    input.value = '';
+
+    appendUserMsg(message);
+    const { thinkEl, bubbleEl, metaEl } = createAssistantMsg();
+    const thinkBody = thinkEl.querySelector('.think-body');
+    let thinkText = '';
+    let replyText = '';
+    const startTime = Date.now();
+
+    try {
+      const resp = await fetch('/admin/debug/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: accountName, model, message }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        bubbleEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml((err.error||{}).message || resp.statusText)}</span>`;
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        const parts = buf.split('\n\n');
+        buf = parts.pop();
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (raw === '[DONE]') continue;
+
+          let evt;
+          try { evt = JSON.parse(raw); } catch { continue; }
+
+          const chatBox = document.getElementById('chatBox');
+          if (evt.type === 'thinking') {
+            thinkText += evt.content;
+            thinkEl.style.display = '';
+            thinkBody.textContent = thinkText;
+            thinkEl.open = true;
+            chatBox.scrollTop = chatBox.scrollHeight;
+          } else if (evt.type === 'text') {
+            replyText += evt.content;
+            bubbleEl.innerHTML = escHtml(replyText) + '<span class="typing-cursor"></span>';
+            chatBox.scrollTop = chatBox.scrollHeight;
+          } else if (evt.type === 'finish') {
+            bubbleEl.innerHTML = replyText ? escHtml(replyText) : '<em style="color:#475569">（空响应）</em>';
+            if (evt.promptTokens !== undefined) {
+              const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+              metaEl.innerHTML = `<div class="token-badge">⏱ ${elapsed}s &nbsp;|&nbsp; 提示词 <span>${evt.promptTokens}</span> &nbsp; 生成 <span>${evt.completionTokens}</span> &nbsp; 合计 <span>${evt.totalTokens}</span> tokens</div>`;
+            }
+          } else if (evt.type === 'error') {
+            bubbleEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml(evt.content)}</span>`;
+          }
+        }
+      }
+
+      // 兜底移除光标
+      if (bubbleEl.querySelector('.typing-cursor')) {
+        bubbleEl.innerHTML = replyText ? escHtml(replyText) : '<em style="color:#475569">（空响应）</em>';
+      }
+
+    } catch (e) {
+      bubbleEl.innerHTML = `<span style="color:#ef4444">❌ 网络错误：${escHtml(String(e))}</span>`;
+    } finally {
+      debugSending = false;
+      btn.disabled = false;
+      btn.textContent = '发送';
+      document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+    }
+  }
+
+  </script>
+
+</body> 
