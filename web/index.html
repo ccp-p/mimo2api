@@ -205,6 +205,13 @@
 
         <div class="debug-opts">
           <div style="display:flex;flex-direction:column;gap:0.3rem;">
+            <label style="margin:0">基础模型</label>
+            <select v-model="baseModel" @change="onBaseModelChange">
+              <option value="clawl-alpha">clawl-alpha</option>
+              <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.3rem;">
             <label style="margin:0">账号</label>
             <select v-model="debugAccount">
               <option value="">自动选择</option>
@@ -214,10 +221,11 @@
           <div style="display:flex;flex-direction:column;gap:0.3rem;">
             <label style="margin:0">模型</label>
             <select v-model="debugModel">
-              <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
-              <option value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
-              <option value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
-              <option value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha">clawl-alpha</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
             </select>
           </div>
           <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:flex-end">
@@ -261,14 +269,21 @@
           <span>export</span> ANTHROPIC_BASE_URL=<span>"http://localhost:8080/v1"</span><br>
           <span>export</span> ANTHROPIC_API_KEY=<span>"{{ currentApiKey || 'sk-mimo' }}"</span>  <em style="color:#475569"># 可在启动时通过 -key 参数自定义</em><br><br>
           # 启动 Claude Code<br>
-          <span>claude</span> --model mimo-v2-flash-studio
+          <span>claude</span> --model {{ debugModel }}
         </div>
         <hr class="divider">
         <p class="section-tip">
-          支持的模型名：<code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
-          · <code style="color:#f97316">mimo-v2-flash-studio-thinking</code>（深度思考）
-          · <code style="color:#f97316">mimo-v2-flash-studio-search</code>（联网搜索）
-          · <code style="color:#f97316">mimo-v2-flash-studio-thinking-search</code>（思考+搜索）
+          <strong>当前基础模型：</strong> <code style="color:#f97316">{{ baseModel === 'clawl-alpha' ? 'clawl-alpha' : 'mimo-v2-flash-studio' }}</code><br>
+          支持的模型名：
+          <span v-if="baseModel === 'clawl-alpha'">
+            <code style="color:#f97316">clawl-alpha</code>（默认）
+          </span>
+          <span v-else>
+            <code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
+            · <code style="color:#f97316">mimo-v2-flash-studio-thinking</code>（深度思考）
+            · <code style="color:#f97316">mimo-v2-flash-studio-search</code>（联网搜索）
+            · <code style="color:#f97316">mimo-v2-flash-studio-thinking-search</code>（思考+搜索）
+          </span>
         </p>
       </div>
 
@@ -315,6 +330,7 @@
 
         // Debug chat
         debugAccount: '',
+        baseModel: 'mimo-v2-flash-studio',
         debugModel: 'mimo-v2-flash-studio',
         debugInput: '',
         debugSending: false,
@@ -480,6 +496,15 @@
 
       clearChat() {
         this.chatMessages = [];
+      },
+
+      onBaseModelChange() {
+        // 当基础模型切换时，自动选择对应的默认模型
+        if (this.baseModel === 'clawl-alpha') {
+          this.debugModel = 'clawl-alpha';
+        } else {
+          this.debugModel = 'mimo-v2-flash-studio';
+        }
       },
 
       escHtml(s) {
