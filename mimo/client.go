@@ -114,7 +114,7 @@ func BuildChatRequest(messages []Message, model string, enableThinking, enableSe
 		webSearch = "enabled"
 	}
 
-	baseModel := "mimo-v2-flash-studio"
+	baseModel := "clawl-alpha"
 
 	return ChatRequest{
 		MsgID:          uuid.New().String(),
