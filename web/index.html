@@ -468,9 +468,13 @@
       },
 
       handleDebugKey(e) {
-        if (e.key === 'Enter' && e.ctrlKey) {
-          e.preventDefault();
-          this.sendDebugChat();
+        if (e.key === 'Enter') {
+          // 如果是单独按Enter（没有按住Ctrl），则发送消息
+          if (!e.ctrlKey) {
+            e.preventDefault();
+            this.sendDebugChat();
+          }
+          // Ctrl+Enter 也支持发送（保持原有功能）
         }
       },
 
