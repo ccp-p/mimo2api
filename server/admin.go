@@ -279,48 +279,69 @@ func extractFromCurl(cmd string) (cookie, ph string) {
 	// 查找 -H 'Cookie: ...' 或 --cookie '...' 模式
 	lines := strings.Split(cmd, "\n")
 	for _, line := range lines {
-		line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), "\\"))
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, "\\")
+		line = strings.TrimSpace(line)
 		lower := strings.ToLower(line)
 
+		// 情况 1: -H 'cookie: ...'
 		if strings.Contains(lower, "cookie:") {
-			// 提取 Cookie 值
 			idx := strings.Index(lower, "cookie:")
 			raw := line[idx+7:]
 			raw = strings.Trim(raw, " '\"`")
-			// 去掉末尾的引号
+			// 去掉末尾可能残留的单引号或双引号（cURL 复制时常见的）
 			raw = strings.TrimRight(raw, "'\"`")
 			cookie = raw
 		}
-	}
-
-	// 也可能在 --cookie 参数中
-	if cookie == "" {
-		for i, arg := range strings.Fields(cmd) {
-			_ = i
-			if arg == "--cookie" || arg == "-b" {
-				// 下一个 token
-				fields := strings.Fields(cmd)
-				for j, f := range fields {
-					if (f == "--cookie" || f == "-b") && j+1 < len(fields) {
-						cookie = strings.Trim(fields[j+1], "'\"")
-					}
-				}
+		// 情况 2: -b '...' 或 --cookie '...'
+		if strings.Contains(lower, "-b ") || strings.Contains(lower, "--cookie ") {
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) > 1 {
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, " '\"`")
+				cookie = val
 			}
 		}
 	}
 
-	if cookie != "" {
-		// 从 cookie 字段中单独找 xiaomichatbot_ph
+	// 提取 ph: 优先从 URL 参数中找，因为 Cookie 里的经常被截断或转义
+	// 查找 xiaomichatbot_ph=XXX
+	if ph == "" {
+		re := []string{"xiaomichatbot_ph=", "xiaomichatbot_ph%3D"}
+		for _, prefix := range re {
+			if idx := strings.Index(cmd, prefix); idx != -1 {
+				val := cmd[idx+len(prefix):]
+				// 找到结束符：空格、引号、分号、&、反斜杠
+				endIdx := strings.IndexAny(val, " '\";&\\")
+				if endIdx != -1 {
+					ph = val[:endIdx]
+				} else {
+					ph = val
+				}
+				break
+			}
+		}
+	}
+
+	// 如果 URL 没找到，再从 Cookie 找
+	if ph == "" && cookie != "" {
 		for _, part := range strings.Split(cookie, ";") {
 			part = strings.TrimSpace(part)
 			if strings.HasPrefix(part, "xiaomichatbot_ph=") {
 				ph = strings.TrimPrefix(part, "xiaomichatbot_ph=")
-				// 去掉值两端可能的引号（Cookie 中常见 xiaomichatbot_ph="xxx" 格式）
 				ph = strings.Trim(ph, "\"'")
 				break
 			}
 		}
 	}
+
+	// 最终清理：去掉可能存在的 URL 编码
+	if strings.Contains(ph, "%") {
+		if decoded, err := url.QueryUnescape(ph); err == nil {
+			ph = decoded
+		}
+	}
+
 	return
 }
 

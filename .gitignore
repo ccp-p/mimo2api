@@ -1,3 +1,3 @@
-./acount*.json
+**/account*.json
 # exe
 *.exe
