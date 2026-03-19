@@ -117,8 +117,8 @@ func main() {
 
 	addr := "0.0.0.0:" + *port
 	log.Printf("🚀 MiMo2API 启动成功")
-	log.Printf("   管理界面: http://<你的IP>%s", ":"+*port)
-	log.Printf("   API 端点: http://<你的IP>%s/v1/chat/completions", ":"+*port)
+	log.Printf("   管理界面: http://localhost%s", ":"+*port)
+	log.Printf("   API 端点: http://localhost%s/v1/chat/completions", ":"+*port)
 	log.Printf("   API Keys: %s", maskKeys(apiKeys))
 	log.Printf("")
 	log.Printf("Claude Code 配置:")

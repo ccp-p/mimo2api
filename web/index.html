@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MiMo2API 管理面板</title>
+<!-- Vue 3 CDN -->
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e2e8f0; min-height: 100vh; }
@@ -78,517 +80,515 @@
 </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">🔥 MiMo2API</div>
-    <div class="badge">OpenAI 兼容代理</div>
-    <div style="flex:1"></div>
-    <div class="badge" id="serverStatus">运行中</div>
-  </div>
-
-<div class="container">
-
-  <!-- 快速开始 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-      快速开始 — 如何获取 Cookie
-    </h2>
-    <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-text">打开 <code>https://aistudio.xiaomimimo.com</code>，登录你的小米账号</div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text">按 <code>F12</code> 打开开发123者工具，切换到 <code>Network</code> 标签</div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text">在聊天框发送任意消息，筛选 <code>chat</code> 请求</div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-text">右键该请求 → <code>Copy as cURL</code>，粘贴到下方解析框</div></div>
-      <div class="step"><div class="step-num">5</div><div class="step-text">点击「解析 cURL」自动提取凭证，然后添加账号即可</div></div>
-    </div>
-  </div>
-
-  <!-- API Key 配置 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-      API Key 配置
-    </h2>
-    <p class="section-tip">设置 API Key 用于接口鉴权，支持多个 Key（用逗号分隔）</p>
-    <label>API Keys（多个用逗号分隔）</label>
-    <input type="text" id="apiKeysInput" placeholder="sk-key1, sk-key2, sk-key3">
-    <div class="btn-group">
-      <button class="btn btn-primary" onclick="saveAPIKeys()">💾 保存</button>
-      <button class="btn btn-secondary" onclick="loadAPIKeys()">🔄 刷新</button>
-    </div>
-    <div id="apiKeyAlert" class="alert"></div>
-  </div>
-
-  <!-- 添加账号 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      添加账号
-    </h2>
-
-    <div class="tab-row">
-      <button class="tab active" onclick="switchTab('curl', event)">粘贴 cURL 自动解析</button>
-      <button class="tab" onclick="switchTab('manual', event)">手动填写</button>
+  <div id="app">
+    <div class="header">
+      <div class="logo">🔥 MiMo2API</div>
+      <div class="badge">OpenAI 兼容代理</div>
+      <div style="flex:1"></div>
+      <div class="badge" id="serverStatus">运行中</div>
     </div>
 
-    <!-- cURL 模式 -->
-    <div id="tabCurl">
-      <label>cURL 命令（从浏览器开发者工具复制）</label>
-      <textarea id="curlInput" placeholder="curl 'https://aistudio.xiaomimimo.com/open-apis/bot/chat' \&#10;  -H 'Cookie: serviceToken=...; userId=...; xiaomichatbot_ph=...' \&#10;  ..."></textarea>
-      <div class="btn-group">
-        <button class="btn btn-secondary" onclick="parseCurl()">🔍 解析 cURL</button>
-      </div>
-      <div id="parseResult" style="display:none; margin-top: 1rem;">
-        <hr class="divider">
-        <label>账号名称（可选）</label>
-        <input type="text" id="parsedName" placeholder="留空自动生成">
-        <label>提取到的 Cookie</label>
-        <input type="text" id="parsedCookie" readonly>
-        <label>提取到的 xiaomichatbot_ph</label>
-        <input type="text" id="parsedPh" readonly>
-        <div class="btn-group">
-          <button class="btn btn-primary" onclick="addFromParsed()">✅ 添加此账号</button>
+    <div class="container">
+
+      <!-- 快速开始 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          快速开始 — 如何获取 Cookie
+        </h2>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text">打开 <code>https://aistudio.xiaomimimo.com</code>，登录你的小米账号</div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">按 <code>F12</code> 打开开发123者工具，切换到 <code>Network</code> 标签</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">在聊天框发送任意消息，筛选 <code>chat</code> 请求</div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text">右键该请求 → <code>Copy as cURL</code>，粘贴到下方解析框</div></div>
+          <div class="step"><div class="step-num">5</div><div class="step-text">点击「解析 cURL」自动提取凭证，然后添加账号即可</div></div>
         </div>
       </div>
-    </div>
 
-    <!-- 手动模式 -->
-    <div id="tabManual" style="display:none;">
-      <label>账号名称（可选）</label>
-      <input type="text" id="manualName" placeholder="留空自动生成">
-      <label>Cookie（完整字符串，包含 serviceToken 和 userId）</label>
-      <textarea id="manualCookie" placeholder="serviceToken=xxxxx; userId=12345678; xiaomichatbot_ph=yyyyy; ..."></textarea>
-      <label>xiaomichatbot_ph（若 Cookie 中已包含可留空）</label>
-      <input type="text" id="manualPh" placeholder="yyyyy（可选，优先从 Cookie 提取）">
-      <div class="btn-group">
-        <button class="btn btn-primary" onclick="addManual()">✅ 添加账号</button>
+      <!-- API Key 配置 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          API Key 配置
+        </h2>
+        <p class="section-tip">设置 API Key 用于接口鉴权，支持多个 Key（用逗号分隔）</p>
+        <label>API Keys（多个用逗号分隔）</label>
+        <input type="text" v-model="apiKeysInput" placeholder="sk-key1, sk-key2, sk-key3">
+        <div class="btn-group">
+          <button class="btn btn-primary" @click="saveAPIKeys">💾 保存</button>
+          <button class="btn btn-secondary" @click="loadAPIKeys">🔄 刷新</button>
+        </div>
+        <div :class="['alert', apiKeyAlertType]" v-show="apiKeyAlertVisible">{{ apiKeyAlertMessage }}</div>
       </div>
-    </div>
 
-    <div id="addAlert" class="alert"></div>
-  </div>
+      <!-- 添加账号 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          添加账号
+        </h2>
 
-  <!-- 账号列表 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      账号列表
-    </h2>
-    <ul class="account-list" id="accountList">
-      <li class="empty">加载中…</li>
-    </ul>
-    <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" onclick="loadAccounts()">🔄 刷新</button>
-      <button class="btn btn-secondary btn-sm" onclick="reloadAll()">♻️ 重新加载配置文件</button>
-    </div>
-  </div>
+        <div class="tab-row">
+          <button class="tab" :class="{active: activeTab === 'curl'}" @click="switchTab('curl')">粘贴 cURL 自动解析</button>
+          <button class="tab" :class="{active: activeTab === 'manual'}" @click="switchTab('manual')">手动填写</button>
+        </div>
 
-  <!-- 对话调试 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      对话调试
-    </h2>
+        <!-- cURL 模式 -->
+        <div v-show="activeTab === 'curl'">
+          <label>cURL 命令（从浏览器开发者工具复制）</label>
+          <textarea v-model="curlInput" placeholder="curl 'https://aistudio.xiaomimimo.com/open-apis/bot/chat' \&#10;  -H 'Cookie: serviceToken=...; userId=...; xiaomichatbot_ph=...' \&#10;  ..."></textarea>
+          <div class="btn-group">
+            <button class="btn btn-secondary" @click="parseCurl">🔍 解析 cURL</button>
+          </div>
+          <div v-show="parseResultVisible" style="margin-top: 1rem;">
+            <hr class="divider">
+            <label>账号名称（可选）</label>
+            <input type="text" v-model="parsedName" placeholder="留空自动生成">
+            <label>提取到的 Cookie</label>
+            <input type="text" v-model="parsedCookie" readonly>
+            <label>提取到的 xiaomichatbot_ph</label>
+            <input type="text" v-model="parsedPh" readonly>
+            <div class="btn-group">
+              <button class="btn btn-primary" @click="addFromParsed">✅ 添加此账号</button>
+            </div>
+          </div>
+        </div>
 
-    <div class="debug-opts">
-      <div style="display:flex;flex-direction:column;gap:0.3rem;">
-        <label style="margin:0">账号</label>
-        <select id="debugAccount">
-          <option value="">自动选择</option>
-        </select>
+        <!-- 手动模式 -->
+        <div v-show="activeTab === 'manual'">
+          <label>账号名称（可选）</label>
+          <input type="text" v-model="manualName" placeholder="留空自动生成">
+          <label>Cookie（完整字符串，包含 serviceToken 和 userId）</label>
+          <textarea v-model="manualCookie" placeholder="serviceToken=xxxxx; userId=12345678; xiaomichatbot_ph=yyyyy; ..."></textarea>
+          <label>xiaomichatbot_ph（若 Cookie 中已包含可留空）</label>
+          <input type="text" v-model="manualPh" placeholder="yyyyy（可选，优先从 Cookie 提取）">
+          <div class="btn-group">
+            <button class="btn btn-primary" @click="addManual">✅ 添加账号</button>
+          </div>
+        </div>
+
+        <div :class="['alert', addAlertType]" v-show="addAlertVisible">{{ addAlertMessage }}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:0.3rem;">
-        <label style="margin:0">模型</label>
-        <select id="debugModel">
-          <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
-          <option value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
-          <option value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
-          <option value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
-        </select>
+
+      <!-- 账号列表 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          账号列表
+        </h2>
+        <ul class="account-list">
+          <li class="empty" v-if="accounts.length === 0">暂无账号，请先添加</li>
+          <li class="account-item" v-for="account in accounts" :key="account.name">
+            <div class="account-info">
+              <div class="status-dot" :class="account.valid ? 'dot-valid' : 'dot-invalid'"></div>
+              <span class="account-name">{{ account.name }}</span>
+              <span style="font-size:0.75rem;color:#475569">{{ account.valid ? '可用' : '失效' }}</span>
+            </div>
+            <div class="account-actions">
+              <button class="btn btn-secondary btn-sm" @click="testAccount(account.name)">测试</button>
+              <button class="btn btn-danger btn-sm" @click="deleteAccount(account.name)">删除</button>
+            </div>
+          </li>
+        </ul>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" @click="loadAccounts">🔄 刷新</button>
+          <button class="btn btn-secondary btn-sm" @click="reloadAll">♻️ 重新加载配置文件</button>
+        </div>
       </div>
-      <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:flex-end">
-        <button class="btn btn-secondary btn-sm" onclick="clearChat()">🗑️ 清空</button>
+
+      <!-- 对话调试 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话调试
+        </h2>
+
+        <div class="debug-opts">
+          <div style="display:flex;flex-direction:column;gap:0.3rem;">
+            <label style="margin:0">账号</label>
+            <select v-model="debugAccount">
+              <option value="">自动选择</option>
+              <option v-for="account in accounts" :key="account.name" :value="account.name">{{ account.name }}{{ account.valid ? '' : ' ⚠️' }}</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.3rem;">
+            <label style="margin:0">模型</label>
+            <select v-model="debugModel">
+              <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
+              <option value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
+              <option value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
+              <option value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
+            </select>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:flex-end">
+            <button class="btn btn-secondary btn-sm" @click="clearChat">🗑️ 清空</button>
+          </div>
+        </div>
+
+        <div class="chat-box" id="chatBox">
+          <div class="chat-empty" v-if="chatMessages.length === 0">发送消息开始调试对话 ↓</div>
+          <div v-for="(msg, index) in chatMessages" :key="index" :class="['chat-msg', msg.type]">
+            <template v-if="msg.type === 'user'">
+              <div class="chat-bubble">{{ msg.content }}</div>
+            </template>
+            <template v-else>
+              <details class="chat-thinking" v-if="msg.thinking" style="display: block;">
+                <summary>💭 深度思考</summary>
+                <div class="think-body">{{ msg.thinking }}</div>
+              </details>
+              <div class="chat-bubble">{{ msg.content }}</div>
+              <div class="chat-meta" v-if="msg.meta">{{ msg.meta }}</div>
+            </template>
+          </div>
+        </div>
+
+        <div class="debug-row" style="margin-top:0.75rem">
+          <textarea v-model="debugInput" placeholder="输入消息，按 Ctrl+Enter 发送…" @keydown="handleDebugKey"></textarea>
+          <button class="btn btn-primary debug-send" @click="sendDebugChat" :disabled="debugSending">
+            {{ debugSending ? '发送中…' : '发送' }}
+          </button>
+        </div>
       </div>
+
+      <!-- Claude Code 使用说明 -->
+      <div class="card">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          在 Claude Code 中使用
+        </h2>
+        <div class="config-box">
+          # 设置环境变量（也可写入 .bashrc / .zshrc）<br>
+          <span>export</span> ANTHROPIC_BASE_URL=<span>"http://localhost:8080/v1"</span><br>
+          <span>export</span> ANTHROPIC_API_KEY=<span>"{{ currentApiKey || 'sk-mimo' }}"</span>  <em style="color:#475569"># 可在启动时通过 -key 参数自定义</em><br><br>
+          # 启动 Claude Code<br>
+          <span>claude</span> --model mimo-v2-flash-studio
+        </div>
+        <hr class="divider">
+        <p class="section-tip">
+          支持的模型名：<code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
+          · <code style="color:#f97316">mimo-v2-flash-studio-thinking</code>（深度思考）
+          · <code style="color:#f97316">mimo-v2-flash-studio-search</code>（联网搜索）
+          · <code style="color:#f97316">mimo-v2-flash-studio-thinking-search</code>（思考+搜索）
+        </p>
+      </div>
+
     </div>
 
-    <div class="chat-box" id="chatBox">
-      <div class="chat-empty" id="chatEmpty">发送消息开始调试对话 ↓</div>
-    </div>
-
-    <div class="debug-row" style="margin-top:0.75rem">
-      <textarea id="debugInput" placeholder="输入消息，按 Ctrl+Enter 发送…" onkeydown="handleDebugKey(event)"></textarea>
-      <button class="btn btn-primary debug-send" id="debugSendBtn" onclick="sendDebugChat()">发送</button>
-    </div>
+    <div id="toast" :style="{display: toastVisible ? 'block' : 'none', background: toastBackground, borderColor: toastBorderColor, color: toastColor}">{{ toastMessage }}</div>
   </div>
-
-  <!-- Claude Code 使用说明 -->
-  <div class="card">
-    <h2>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      在 Claude Code 中使用
-    </h2>
-    <div class="config-box">
-      # 设置环境变量（也可写入 .bashrc / .zshrc）<br>
-      <span>export</span> ANTHROPIC_BASE_URL=<span>"http://localhost:8080/v1"</span><br>
-      <span>export</span> ANTHROPIC_API_KEY=<span>"sk-mimo"</span>  <em style="color:#475569"># 可在启动时通过 -key 参数自定义</em><br><br>
-      # 启动 Claude Code<br>
-      <span>claude</span> --model mimo-v2-flash-studio
-    </div>
-    <hr class="divider">
-    <p class="section-tip">
-      支持的模型名：<code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
-      · <code style="color:#f97316">mimo-v2-flash-studio-thinking</code>（深度思考）
-      · <code style="color:#f97316">mimo-v2-flash-studio-search</code>（联网搜索）
-      · <code style="color:#f97316">mimo-v2-flash-studio-thinking-search</code>（思考+搜索）
-    </p>
-  </div>
-
-</div>
-
-<div id="toast"></div>
 
   <script>
-  let accounts = [];
+  const { createApp } = Vue;
 
-  async function api(path, method = 'GET', body) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch('/admin' + path, opts);
-    return res.json();
-  }
+  createApp({
+    data() {
+      return {
+        // API Keys
+        apiKeysInput: '',
+        apiKeyAlertVisible: false,
+        apiKeyAlertType: '',
+        apiKeyAlertMessage: '',
+        currentApiKey: '',
 
-  function toast(msg, err) {
-    const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.style.background = err ? '#7f1d1d' : '#14532d';
-    el.style.borderColor = err ? '#991b1b' : '#166534';
-    el.style.color = err ? '#fca5a5' : '#86efac';
-    el.style.display = 'block';
-    setTimeout(() => el.style.display = 'none', 3000);
-  }
+        // Tab switching
+        activeTab: 'curl',
 
-  function switchTab(tab, event) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tabCurl').style.display = tab === 'curl' ? 'block' : 'none';
-    document.getElementById('tabManual').style.display = tab === 'manual' ? 'block' : 'none';
-    if (event && event.target) {
-      event.target.classList.add('active');
-    }
-  }
+        // cURL parsing
+        curlInput: '',
+        parseResultVisible: false,
+        parsedName: '',
+        parsedCookie: '',
+        parsedPh: '',
 
-  async function parseCurl() {
-    const curl = document.getElementById('curlInput').value.trim();
-    if (!curl) { toast('请先粘贴 cURL 命令', true); return; }
-    const data = await api('/parse-curl', 'POST', { curl });
-    if (!data.cookie) { toast('解析失败，请确认 cURL 包含 Cookie 头', true); return; }
-    document.getElementById('parsedCookie').value = data.cookie;
-    document.getElementById('parsedPh').value = data.ph || '';
-    document.getElementById('parseResult').style.display = 'block';
-    toast('解析成功！');
-  }
+        // Manual input
+        manualName: '',
+        manualCookie: '',
+        manualPh: '',
 
-  async function addFromParsed() {
-    const cookie = document.getElementById('parsedCookie').value.trim();
-    const ph = document.getElementById('parsedPh').value.trim();
-    const name = document.getElementById('parsedName').value.trim();
-    if (!cookie) { toast('Cookie 为空', true); return; }
-    await doAdd(name, cookie, ph);
-    document.getElementById('parseResult').style.display = 'none';
-    document.getElementById('curlInput').value = '';
-  }
+        // Add alert
+        addAlertVisible: false,
+        addAlertType: '',
+        addAlertMessage: '',
 
-  async function addManual() {
-    const cookie = document.getElementById('manualCookie').value.trim();
-    let ph = document.getElementById('manualPh').value.trim();
-    const name = document.getElementById('manualName').value.trim();
-    if (!cookie) { toast('Cookie 不能为空', true); return; }
-    // 从 cookie 中提取 ph
-    if (!ph) {
-      const match = cookie.match(/xiaomichatbot_ph=([^;]+)/);
-      if (match) ph = match[1].trim();
-    }
-    await doAdd(name, cookie, ph);
-  }
+        // Accounts
+        accounts: [],
 
-  async function doAdd(name, cookie, ph) {
-    const data = await api('/accounts/add', 'POST', { name, cookie, ph });
-    if (data.ok) {
-      toast('账号 ' + (data.name || name) + ' 添加成功');
-      loadAccounts();
-    } else {
-      toast(data.error || '添加失败', true);
-    }
-  }
+        // Debug chat
+        debugAccount: '',
+        debugModel: 'mimo-v2-flash-studio',
+        debugInput: '',
+        debugSending: false,
+        chatMessages: [],
 
-  async function deleteAccount(name) {
-    if (!confirm('确认删除账号「' + name + '」？')) return;
-    await api('/accounts/delete', 'POST', { name });
-    toast('已删除 ' + name);
-    loadAccounts();
-  }
+        // Toast
+        toastVisible: false,
+        toastMessage: '',
+        toastBackground: '#14532d',
+        toastBorderColor: '#166534',
+        toastColor: '#86efac'
+      }
+    },
 
-  async function testAccount(name) {
-    toast('测试中，请稍候…');
-    const data = await api('/accounts/test', 'POST', { name });
-    if (data.valid) {
-      toast('✅ 账号 ' + name + ' 有效');
-    } else {
-      toast('❌ 账号 ' + name + ' 失效：' + (data.error || ''), true);
-    }
-    loadAccounts();
-  }
+    methods: {
+      async api(path, method = 'GET', body) {
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch('/admin' + path, opts);
+        return res.json();
+      },
 
-  async function loadAccounts() {
-    const data = await api('/accounts');
-    accounts = data.accounts || [];
-    const list = document.getElementById('accountList');
-    if (!accounts.length) {
-      list.innerHTML = '<li class="empty">暂无账号，请先添加</li>';
-      updateDebugAccountSelect && updateDebugAccountSelect();
-      return;
-    }
-    list.innerHTML = accounts.map(a => `
-      <li class="account-item">
-        <div class="account-info">
-          <div class="status-dot ${a.valid ? 'dot-valid' : 'dot-invalid'}"></div>
-          <span class="account-name">${a.name}</span>
-          <span style="font-size:0.75rem;color:#475569">${a.valid ? '可用' : '失效'}</span>
-        </div>
-        <div class="account-actions">
-          <button class="btn btn-secondary btn-sm" onclick="testAccount('${a.name}')">测试</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteAccount('${a.name}')">删除</button>
-        </div>
-      </li>
-    `).join('');
-    updateDebugAccountSelect && updateDebugAccountSelect();
-  }
+      toast(msg, err = false) {
+        this.toastMessage = msg;
+        this.toastBackground = err ? '#7f1d1d' : '#14532d';
+        this.toastBorderColor = err ? '#991b1b' : '#166534';
+        this.toastColor = err ? '#fca5a5' : '#86efac';
+        this.toastVisible = true;
+        setTimeout(() => {
+          this.toastVisible = false;
+        }, 3000);
+      },
 
-  async function reloadAll() {
-    const data = await api('/reload', 'POST');
-    if (data.ok) {
-      toast('重新加载成功，共 ' + (data.accounts || []).length + ' 个账号');
-      loadAccounts();
-    } else {
-      toast(data.error || '加载失败', true);
-    }
-  }
+      switchTab(tab) {
+        this.activeTab = tab;
+      },
 
-  loadAccounts();
-  loadAPIKeys();
-
-  // ——— API Key 配置 ———
-
-  async function loadAPIKeys() {
-    const data = await api('/config/api-keys');
-    if (data.api_keys) {
-      document.getElementById('apiKeysInput').value = data.api_keys.join(', ');
-    }
-  }
-
-  async function saveAPIKeys() {
-    const input = document.getElementById('apiKeysInput').value.trim();
-    const data = await api('/config/api-keys/set', 'POST', { keys: input });
-    const alertEl = document.getElementById('apiKeyAlert');
-    if (data.ok) {
-      alertEl.textContent = '保存成功！当前 Keys: ' + data.api_keys.join(', ');
-      alertEl.className = 'alert alert-success';
-      alertEl.style.display = 'block';
-      // 同时更新使用说明中的 API Key
-      updateUsageGuide(data.api_keys[0]);
-    } else {
-      alertEl.textContent = '保存失败: ' + (data.error || '未知错误');
-      alertEl.className = 'alert alert-error';
-      alertEl.style.display = 'block';
-    }
-    setTimeout(() => alertEl.style.display = 'none', 4000);
-  }
-
-  function updateUsageGuide(key) {
-    // 更新使用说明中的 API Key 显示
-    const guideBox = document.querySelector('.config-box');
-    if (guideBox) {
-      const lines = guideBox.innerHTML.split('<br>');
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('ANTHROPIC_API_KEY')) {
-          lines[i] = lines[i].replace(/sk-mimo|"[^"]*"/, '"' + (key || 'sk-mimo') + '"');
+      async parseCurl() {
+        const curl = this.curlInput.trim();
+        if (!curl) {
+          this.toast('请先粘贴 cURL 命令', true);
+          return;
         }
-      }
-      guideBox.innerHTML = lines.join('<br>');
-    }
-  }
+        const data = await this.api('/parse-curl', 'POST', { curl });
+        if (!data.cookie) {
+          this.toast('解析失败，请确认 cURL 包含 Cookie 头', true);
+          return;
+        }
+        this.parsedCookie = data.cookie;
+        this.parsedPh = data.ph || '';
+        this.parseResultVisible = true;
+        this.toast('解析成功！');
+      },
 
-  // ——— 调试对话 ———
+      async addFromParsed() {
+        const cookie = this.parsedCookie.trim();
+        const ph = this.parsedPh.trim();
+        const name = this.parsedName.trim();
+        if (!cookie) {
+          this.toast('Cookie 为空', true);
+          return;
+        }
+        await this.doAdd(name, cookie, ph);
+        this.parseResultVisible = false;
+        this.curlInput = '';
+      },
 
-  let debugSending = false;
+      async addManual() {
+        const cookie = this.manualCookie.trim();
+        let ph = this.manualPh.trim();
+        const name = this.manualName.trim();
+        if (!cookie) {
+          this.toast('Cookie 不能为空', true);
+          return;
+        }
+        // 从 cookie 中提取 ph
+        if (!ph) {
+          const match = cookie.match(/xiaomichatbot_ph=([^;]+)/);
+          if (match) ph = match[1].trim();
+        }
+        await this.doAdd(name, cookie, ph);
+      },
 
-  function updateDebugAccountSelect() {
-    const sel = document.getElementById('debugAccount');
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">自动选择</option>';
-    accounts.forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = a.name;
-      opt.textContent = a.name + (a.valid ? '' : ' ⚠️');
-      sel.appendChild(opt);
-    });
-    if (cur) sel.value = cur;
-  }
+      async doAdd(name, cookie, ph) {
+        const data = await this.api('/accounts/add', 'POST', { name, cookie, ph });
+        if (data.ok) {
+          this.toast('账号 ' + (data.name || name) + ' 添加成功');
+          this.loadAccounts();
+        } else {
+          this.toast(data.error || '添加失败', true);
+        }
+      },
 
-  function handleDebugKey(e) {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      e.preventDefault();
-      sendDebugChat();
-    }
-  }
+      async deleteAccount(name) {
+        if (!confirm('确认删除账号「' + name + '」？')) return;
+        await this.api('/accounts/delete', 'POST', { name });
+        this.toast('已删除 ' + name);
+        this.loadAccounts();
+      },
 
-  function clearChat() {
-    const box = document.getElementById('chatBox');
-    box.innerHTML = '<div class="chat-empty" id="chatEmpty">发送消息开始调试对话 ↓</div>';
-  }
+      async testAccount(name) {
+        this.toast('测试中，请稍候…');
+        const data = await this.api('/accounts/test', 'POST', { name });
+        if (data.valid) {
+          this.toast('✅ 账号 ' + name + ' 有效');
+        } else {
+          this.toast('❌ 账号 ' + name + ' 失效：' + (data.error || ''), true);
+        }
+        this.loadAccounts();
+      },
 
-  function appendUserMsg(text) {
-    const box = document.getElementById('chatBox');
-    const empty = document.getElementById('chatEmpty');
-    if (empty) empty.remove();
+      async loadAccounts() {
+        const data = await this.api('/accounts');
+        this.accounts = data.accounts || [];
+      },
 
-    const el = document.createElement('div');
-    el.className = 'chat-msg user';
-    el.innerHTML = `<div class="chat-bubble">${escHtml(text)}</div>`;
-    box.appendChild(el);
-    box.scrollTop = box.scrollHeight;
-    return el;
-  }
+      async reloadAll() {
+        const data = await this.api('/reload', 'POST');
+        if (data.ok) {
+          this.toast('重新加载成功，共 ' + (data.accounts || []).length + ' 个账号');
+          this.loadAccounts();
+        } else {
+          this.toast(data.error || '加载失败', true);
+        }
+      },
 
-  function createAssistantMsg() {
-    const box = document.getElementById('chatBox');
-    const empty = document.getElementById('chatEmpty');
-    if (empty) empty.remove();
+      async loadAPIKeys() {
+        const data = await this.api('/config/api-keys');
+        if (data.api_keys) {
+          this.apiKeysInput = data.api_keys.join(', ');
+          this.currentApiKey = data.api_keys[0] || '';
+        }
+      },
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'chat-msg assistant';
+      async saveAPIKeys() {
+        const input = this.apiKeysInput.trim();
+        const data = await this.api('/config/api-keys/set', 'POST', { keys: input });
+        if (data.ok) {
+          this.apiKeyAlertMessage = '保存成功！当前 Keys: ' + data.api_keys.join(', ');
+          this.apiKeyAlertType = 'alert-success';
+          this.apiKeyAlertVisible = true;
+          this.currentApiKey = data.api_keys[0] || '';
+        } else {
+          this.apiKeyAlertMessage = '保存失败: ' + (data.error || '未知错误');
+          this.apiKeyAlertType = 'alert-error';
+          this.apiKeyAlertVisible = true;
+        }
+        setTimeout(() => {
+          this.apiKeyAlertVisible = false;
+        }, 4000);
+      },
 
-    const thinkEl = document.createElement('details');
-    thinkEl.className = 'chat-thinking';
-    thinkEl.style.display = 'none';
-    thinkEl.innerHTML = '<summary>💭 深度思考</summary><div class="think-body"></div>';
+      handleDebugKey(e) {
+        if (e.key === 'Enter' && e.ctrlKey) {
+          e.preventDefault();
+          this.sendDebugChat();
+        }
+      },
 
-    const bubbleEl = document.createElement('div');
-    bubbleEl.className = 'chat-bubble';
-    bubbleEl.innerHTML = '<span class="typing-cursor"></span>';
+      clearChat() {
+        this.chatMessages = [];
+      },
 
-    const metaEl = document.createElement('div');
-    metaEl.className = 'chat-meta';
+      escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      },
 
-    wrapper.appendChild(thinkEl);
-    wrapper.appendChild(bubbleEl);
-    wrapper.appendChild(metaEl);
-    box.appendChild(wrapper);
-    box.scrollTop = box.scrollHeight;
-    return { wrapper, thinkEl, bubbleEl, metaEl };
-  }
+      async sendDebugChat() {
+        if (this.debugSending) return;
+        const message = this.debugInput.trim();
+        if (!message) {
+          this.toast('请输入消息内容', true);
+          return;
+        }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+        if (this.accounts.length === 0) {
+          this.toast('请先添加账号', true);
+          return;
+        }
 
-  async function sendDebugChat() {
-    if (debugSending) return;
-    const input = document.getElementById('debugInput');
-    const message = input.value.trim();
-    if (!message) { toast('请输入消息内容', true); return; }
+        this.debugSending = true;
+        this.debugInput = '';
 
-    const accountName = document.getElementById('debugAccount').value;
-    const model = document.getElementById('debugModel').value;
+        // Add user message
+        this.chatMessages.push({
+          type: 'user',
+          content: message
+        });
 
-    if (accounts.length === 0) {
-      toast('请先添加账号', true);
-      return;
-    }
+        // Create assistant message placeholder
+        const assistantMsg = {
+          type: 'assistant',
+          content: '',
+          thinking: '',
+          meta: '',
+          showThinking: false
+        };
+        this.chatMessages.push(assistantMsg);
 
-    debugSending = true;
-    const btn = document.getElementById('debugSendBtn');
-    btn.disabled = true;
-    btn.textContent = '发送中…';
-    input.value = '';
+        const startTime = Date.now();
 
-    appendUserMsg(message);
-    const { thinkEl, bubbleEl, metaEl } = createAssistantMsg();
-    const thinkBody = thinkEl.querySelector('.think-body');
-    let thinkText = '';
-    let replyText = '';
-    const startTime = Date.now();
+        try {
+          const resp = await fetch('/admin/debug/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account: this.debugAccount,
+              model: this.debugModel,
+              message
+            }),
+          });
 
-    try {
-      const resp = await fetch('/admin/debug/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: accountName, model, message }),
-      });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        bubbleEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml((err.error||{}).message || resp.statusText)}</span>`;
-        return;
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        const parts = buf.split('\n\n');
-        buf = parts.pop();
-
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith('data:')) continue;
-          const raw = line.slice(5).trim();
-          if (raw === '[DONE]') continue;
-
-          let evt;
-          try { evt = JSON.parse(raw); } catch { continue; }
-
-          const chatBox = document.getElementById('chatBox');
-          if (evt.type === 'thinking') {
-            thinkText += evt.content;
-            thinkEl.style.display = '';
-            thinkBody.textContent = thinkText;
-            thinkEl.open = true;
-            chatBox.scrollTop = chatBox.scrollHeight;
-          } else if (evt.type === 'text') {
-            replyText += evt.content;
-            bubbleEl.innerHTML = escHtml(replyText) + '<span class="typing-cursor"></span>';
-            chatBox.scrollTop = chatBox.scrollHeight;
-          } else if (evt.type === 'finish') {
-            bubbleEl.innerHTML = replyText ? escHtml(replyText) : '<em style="color:#475569">（空响应）</em>';
-            if (evt.promptTokens !== undefined) {
-              const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-              metaEl.innerHTML = `<div class="token-badge">⏱ ${elapsed}s &nbsp;|&nbsp; 提示词 <span>${evt.promptTokens}</span> &nbsp; 生成 <span>${evt.completionTokens}</span> &nbsp; 合计 <span>${evt.totalTokens}</span> tokens</div>`;
-            }
-          } else if (evt.type === 'error') {
-            bubbleEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml(evt.content)}</span>`;
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            assistantMsg.content = `❌ ${this.escHtml((err.error||{}).message || resp.statusText)}`;
+            return;
           }
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+
+            const parts = buf.split('\n\n');
+            buf = parts.pop();
+
+            for (const part of parts) {
+              const line = part.trim();
+              if (!line.startsWith('data:')) continue;
+              const raw = line.slice(5).trim();
+              if (raw === '[DONE]') continue;
+
+              let evt;
+              try { evt = JSON.parse(raw); } catch { continue; }
+
+              if (evt.type === 'thinking') {
+                assistantMsg.thinking += evt.content;
+                assistantMsg.showThinking = true;
+              } else if (evt.type === 'text') {
+                assistantMsg.content += evt.content;
+              } else if (evt.type === 'finish') {
+                if (evt.promptTokens !== undefined) {
+                  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                  assistantMsg.meta = `⏱ ${elapsed}s | 提示词 ${evt.promptTokens} | 生成 ${evt.completionTokens} | 合计 ${evt.totalTokens} tokens`;
+                }
+              } else if (evt.type === 'error') {
+                assistantMsg.content = `❌ ${this.escHtml(evt.content)}`;
+              }
+            }
+          }
+
+          // 兜底处理
+          if (!assistantMsg.content) {
+            assistantMsg.content = '<em style="color:#475569">（空响应）</em>';
+          }
+
+        } catch (e) {
+          assistantMsg.content = `❌ 网络错误：${this.escHtml(String(e))}`;
+        } finally {
+          this.debugSending = false;
         }
       }
+    },
 
-      // 兜底移除光标
-      if (bubbleEl.querySelector('.typing-cursor')) {
-        bubbleEl.innerHTML = replyText ? escHtml(replyText) : '<em style="color:#475569">（空响应）</em>';
-      }
-
-    } catch (e) {
-      bubbleEl.innerHTML = `<span style="color:#ef4444">❌ 网络错误：${escHtml(String(e))}</span>`;
-    } finally {
-      debugSending = false;
-      btn.disabled = false;
-      btn.textContent = '发送';
-      document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+    mounted() {
+      this.loadAccounts();
+      this.loadAPIKeys();
     }
-  }
-
+  }).mount('#app');
   </script>
 
-</body> 
+</body>
+</html>
