@@ -222,6 +222,9 @@
             <label style="margin:0">模型</label>
             <select v-model="debugModel">
               <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha">clawl-alpha</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking">clawl-alpha-thinking（深度思考）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-search">clawl-alpha-search（联网搜索）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking-search">clawl-alpha-thinking-search（思考+搜索）</option>
               <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
               <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
               <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
@@ -277,6 +280,9 @@
           支持的模型名：
           <span v-if="baseModel === 'clawl-alpha'">
             <code style="color:#f97316">clawl-alpha</code>（默认）
+            · <code style="color:#f97316">clawl-alpha-thinking</code>（深度思考）
+            · <code style="color:#f97316">clawl-alpha-search</code>（联网搜索）
+            · <code style="color:#f97316">clawl-alpha-thinking-search</code>（思考+搜索）
           </span>
           <span v-else>
             <code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
