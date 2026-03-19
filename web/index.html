@@ -207,8 +207,9 @@
           <div style="display:flex;flex-direction:column;gap:0.3rem;">
             <label style="margin:0">基础模型</label>
             <select v-model="baseModel" @change="onBaseModelChange">
-              <option value="clawl-alpha">clawl-alpha</option>
-              <option value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
+              <option value="clawl-alpha">Pro</option>
+              <option value="clawm-alpha">Omni</option>
+              <option value="mimo-v2-flash-studio">Flash Studio</option>
             </select>
           </div>
           <div style="display:flex;flex-direction:column;gap:0.3rem;">
@@ -221,14 +222,18 @@
           <div style="display:flex;flex-direction:column;gap:0.3rem;">
             <label style="margin:0">模型</label>
             <select v-model="debugModel">
-              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha">clawl-alpha</option>
-              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking">clawl-alpha-thinking（深度思考）</option>
-              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-search">clawl-alpha-search（联网搜索）</option>
-              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking-search">clawl-alpha-thinking-search（思考+搜索）</option>
-              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio">mimo-v2-flash-studio</option>
-              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking">mimo-v2-flash-studio-thinking（深度思考）</option>
-              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-search">mimo-v2-flash-studio-search（联网搜索）</option>
-              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking-search">mimo-v2-flash-studio-thinking-search（思考+搜索）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha">Pro</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking">Pro（深度思考）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-search">Pro（联网搜索）</option>
+              <option v-if="baseModel === 'clawl-alpha'" value="clawl-alpha-thinking-search">Pro（思考+搜索）</option>
+              <option v-if="baseModel === 'clawm-alpha'" value="clawm-alpha">Omni</option>
+              <option v-if="baseModel === 'clawm-alpha'" value="clawm-alpha-thinking">Omni（深度思考）</option>
+              <option v-if="baseModel === 'clawm-alpha'" value="clawm-alpha-search">Omni（联网搜索）</option>
+              <option v-if="baseModel === 'clawm-alpha'" value="clawm-alpha-thinking-search">Omni（思考+搜索）</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio">Flash Studio</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking">Flash Studio（深度思考）</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-search">Flash Studio（联网搜索）</option>
+              <option v-if="baseModel === 'mimo-v2-flash-studio'" value="mimo-v2-flash-studio-thinking-search">Flash Studio（思考+搜索）</option>
             </select>
           </div>
           <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:flex-end">
@@ -276,13 +281,23 @@
         </div>
         <hr class="divider">
         <p class="section-tip">
-          <strong>当前基础模型：</strong> <code style="color:#f97316">{{ baseModel === 'clawl-alpha' ? 'clawl-alpha' : 'mimo-v2-flash-studio' }}</code><br>
+          <strong>当前基础模型：</strong>
+          <span v-if="baseModel === 'clawl-alpha'">Pro</span>
+          <span v-else-if="baseModel === 'clawm-alpha'">Omni</span>
+          <span v-else>Flash Studio</span>
+          <br>
           支持的模型名：
           <span v-if="baseModel === 'clawl-alpha'">
             <code style="color:#f97316">clawl-alpha</code>（默认）
             · <code style="color:#f97316">clawl-alpha-thinking</code>（深度思考）
             · <code style="color:#f97316">clawl-alpha-search</code>（联网搜索）
             · <code style="color:#f97316">clawl-alpha-thinking-search</code>（思考+搜索）
+          </span>
+          <span v-else-if="baseModel === 'clawm-alpha'">
+            <code style="color:#f97316">clawm-alpha</code>（默认）
+            · <code style="color:#f97316">clawm-alpha-thinking</code>（深度思考）
+            · <code style="color:#f97316">clawm-alpha-search</code>（联网搜索）
+            · <code style="color:#f97316">clawm-alpha-thinking-search</code>（思考+搜索）
           </span>
           <span v-else>
             <code style="color:#f97316">mimo-v2-flash-studio</code>（默认）
@@ -336,7 +351,7 @@
 
         // Debug chat
         debugAccount: '',
-        baseModel: 'mimo-v2-flash-studio',
+        baseModel: 'clawl-alpha',
         debugModel: 'mimo-v2-flash-studio',
         debugInput: '',
         debugSending: false,
@@ -508,6 +523,8 @@
         // 当基础模型切换时，自动选择对应的默认模型
         if (this.baseModel === 'clawl-alpha') {
           this.debugModel = 'clawl-alpha';
+        } else if (this.baseModel === 'clawm-alpha') {
+          this.debugModel = 'clawm-alpha';
         } else {
           this.debugModel = 'mimo-v2-flash-studio';
         }
